@@ -129,8 +129,15 @@ startup
             "Titanic Monarch Act 1", "Titanic Monarch Act 2"
         }
     };
-    settings.Add("mania", true, "Mania Mode");
-    settings.Add("encore", true, "Encore Mode");
+    settings.Add("starts", true, "Autostart options");
+    settings.Add("smania", true, "Enable auto start in Mania mode", "starts");
+    settings.Add("sencore", true, "Enable auto start in Encore mode", "starts");
+    settings.Add("resets", true, "Autoreset options");
+    settings.Add("saveSelect", true, "Automatically reset when returning to the save selection screen", "resets");
+    settings.Add("devMenu", false, "Automatically reset when opening the dev menu", "resets");
+    settings.Add("autosplitting", true, "Autosplitting options");
+    settings.Add("mania", true, "Mania Mode", "autosplitting");
+    settings.Add("encore", true, "Encore Mode", "autosplitting");
     int J = 0;
     for (int i = 0; i < actsName.Length; i++)
     {
@@ -357,7 +364,11 @@ start
 
     if (vars.watchers["ManiaModeSelection"].Current)
     {
-        // In mania mode, first check if your save selection is not out of bounds
+        // First, check if you disabled autostart in Mania Mode
+        if (!settings["smania"])
+            return false;
+
+        // Then, first check if your save selection is not out of bounds
         if (vars.watchers["SaveSelection_Mania"].Current > 8)
             return false;
         
@@ -368,6 +379,10 @@ start
         else
             return vars.watchers["Save_" + vars.watchers["SaveSelection_Mania"].Current.ToString()].Current == 255 || vars.watchers["Save_" + vars.watchers["SaveSelection_Mania"].Current.ToString()].Current == 0;
     } else {
+        // First, check if you disabled autostart in Encore Mode
+        if (!settings["sencore"])
+            return false;
+
         // In encore mode, similar to mania mode, first we need to make sure our selection is not out of bounds
         if (vars.watchers["SaveSelection_Encore"].Current > 3)
             return false;
@@ -383,6 +398,9 @@ start
 
 reset
 {
-    // Automatically reset whenever you return to either the title screen or the main menu
-    return vars.watchers["LevelID"].Old != 1 && vars.watchers["LevelID"].Old != 2 && (vars.watchers["LevelID"].Current == 1 || vars.watchers["LevelID"].Current == 2);
+    return
+        // Automatically reset whenever you return to either the title screen or the main menu
+        (settings["saveSelect"] && vars.watchers["LevelID"].Old != 1 && vars.watchers["LevelID"].Old != 2 && (vars.watchers["LevelID"].Current == 1 || vars.watchers["LevelID"].Current == 2))
+        // Or, alternatively, whenever you open the dev menu, if you enabled the relative option in the settings
+        || (settings["devMenu"] && vars.watchers["Status"].Changed && vars.watchers["Status"].Current == 8);
 }
