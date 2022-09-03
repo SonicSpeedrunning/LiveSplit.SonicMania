@@ -5,7 +5,7 @@
 // - Decompilations (RSDKv5 and RSDKv5U, both 32bit and 64bit)
 // Coding: Jujstme (very loosely on the previous version by ClarisRobyn)
 // contacts: just.tribe@gmail.com
-// Version: 1.3.1 (Aug 21st, 2022)
+// Version: 1.3.2 (Sep 3rd, 2022)
 
 state("SonicMania") {}
 state("RSDKv5") {}
