@@ -1,5 +1,5 @@
 #![no_std]
-use asr::{signature::Signature, timer, timer::TimerState, watcher::{Watcher, Pair}, Address, Process, time::Duration};
+use asr::{signature::Signature, timer, timer::TimerState, watcher::Watcher, Address, Process, time::Duration};
 
 #[cfg(all(not(test), target_arch = "wasm32"))]
 #[panic_handler]
@@ -122,10 +122,10 @@ struct Settings {
     /// START: Enable auto start in Encore mode
     start_encore_mode: bool,
     #[default = true]
-    /// RESET: Automatically reset when returning to the save selection screen
+    /// RESET: Auto reset when returning to the save selection screen
     reset_save_select: bool,
     #[default = false]
-    /// RESET: Automatically reset when opening the dev menu
+    /// RESET: Auto reset when opening the dev menu
     reset_dev_menu: bool,
     #[default = true]
     /// Green Hill Act 1
@@ -565,26 +565,43 @@ impl State {
         let Some(addresses) = &game.addresses else { return };
         let proc = &game.game;
 
-        // Define Game mode (Mania vs. Encore)
-        let game_mode = if game.is_64_bit { proc.read_pointer_path64::<u8>(addresses.character_base.0, &[0, 0]).ok().unwrap_or_else(|| 0) } else { proc.read_pointer_path32::<u8>(addresses.character_base.0 as u32, &[0, 0]).ok().unwrap_or_else(|| 0) };
-        self.watchers.game_mode.update(Some(if game_mode == 0 { GameMode::Standard } else if game_mode == 1 { GameMode::Encore } else { GameMode::Invalid }));
+        let game_mode: u8;
+        let levelid: u8;
+        let status: [u8; 5];
+        let enum_levelid: Acts;
+        let egg_reverie_monarch_health: u8;
+        let egg_reverie_eggman_health: u8;
+        let tm2_defeat: u8;
+        let chaos_emeralds: u8;
+        let characters: [u8; 2];
 
-        // Define Level ID
-        let levelid = if game.is_64_bit { proc.read_pointer_path64::<u8>(addresses.level_id_base.0, &[0, addresses.level_id_offset as u64]).ok().unwrap_or_else(|| 0) } else { proc.read_pointer_path32::<u8>(addresses.level_id_base.0 as u32, &[0, addresses.level_id_offset]).ok().unwrap_or_else(|| 0) };
-        self.watchers.level_id_numeric.update(Some(levelid));
+        if game.is_64_bit {
+            game_mode = proc.read_pointer_path64(addresses.character_base.0, &[0, 0]).ok().unwrap_or_default();
+            levelid = proc.read_pointer_path64(addresses.level_id_base.0, &[0, addresses.level_id_offset as u64]).ok().unwrap_or_default();
+            status = proc.read_pointer_path64(addresses.status_base.0, &[0, addresses.status_offset as u64]).ok().unwrap_or_default();
+            egg_reverie_monarch_health = proc.read_pointer_path64(addresses.egg_reverie_base.0, &[0, addresses.egg_reverie1_offset1 as u64, addresses.egg_reverie1_offset2 as u64]).ok().unwrap_or_default();
+            egg_reverie_eggman_health = proc.read_pointer_path64(addresses.egg_reverie_base.0, &[0, addresses.egg_reverie2_offset1 as u64, addresses.egg_reverie2_offset2 as u64]).ok().unwrap_or_default();
+            tm2_defeat = proc.read_pointer_path64(addresses.egg_monarch_base.0, &[0, addresses.egg_monarch_offset as u64]).ok().unwrap_or_default();
+            chaos_emeralds = proc.read_pointer_path64(addresses.chaos_emerald_base.0, &[0, addresses.chaos_emerald_offset1 as u64, addresses.chaos_emerald_offset2 as u64]).ok().unwrap_or_default();
+            characters = proc.read_pointer_path64(addresses.character_base.0, &[0, addresses.character_offset as u64]).ok().unwrap_or_default();
+        } else {
+            game_mode = proc.read_pointer_path32(addresses.character_base.0 as u32, &[0, 0]).ok().unwrap_or_default();
+            levelid = proc.read_pointer_path32(addresses.level_id_base.0 as u32, &[0, addresses.level_id_offset]).ok().unwrap_or_default();
+            status = proc.read_pointer_path32(addresses.status_base.0 as u32, &[0, addresses.status_offset]).ok().unwrap_or_default();
+            egg_reverie_monarch_health = proc.read_pointer_path32(addresses.egg_reverie_base.0 as u32, &[0, addresses.egg_reverie1_offset1, addresses.egg_reverie1_offset2]).ok().unwrap_or_default();
+            egg_reverie_eggman_health = proc.read_pointer_path32(addresses.egg_reverie_base.0 as u32, &[0, addresses.egg_reverie2_offset1, addresses.egg_reverie2_offset2]).ok().unwrap_or_default();
+            tm2_defeat = proc.read_pointer_path32(addresses.egg_monarch_base.0 as u32, &[0, addresses.egg_monarch_offset]).ok().unwrap_or_default();
+            chaos_emeralds = proc.read_pointer_path32(addresses.chaos_emerald_base.0 as u32, &[0, addresses.chaos_emerald_offset1, addresses.chaos_emerald_offset2]).ok().unwrap_or_default();
+            characters = proc.read_pointer_path32(addresses.character_base.0 as u32, &[0, addresses.character_offset]).ok().unwrap_or_default();
+        }
 
-        let status = if game.is_64_bit { proc.read_pointer_path64::<[u8; 5]>(addresses.status_base.0, &[0, addresses.status_offset as u64]).ok().unwrap_or_default() } else { proc.read_pointer_path32::<[u8; 5]>(addresses.status_base.0 as u32, &[0, addresses.status_offset]).ok().unwrap_or_default() };
-        
         // If level ID == 37, it's always Egg Reverie. Don't even consider the IGT because it's scrambled in that stage
         if levelid == 37 { 
-            self.watchers.level_id.update(Some(Acts::EggReverie));
+            enum_levelid = Acts::EggReverie;
         } else {
-            let game_mode = self.watchers.game_mode.pair.unwrap_or_else(|| Pair{old: GameMode::Standard, current: GameMode::Standard});
-            let mut enum_levelid: Acts = self.watchers.level_id.pair.unwrap_or_else(|| Pair { old: Acts::GreenHill1, current: Acts::GreenHill1 }).current;
-
             if status[0] == 2 || (status[0] != 0 && status[2] + status[3] + status[4] == 0) {
-                if game_mode.current == GameMode::Standard {
-                    enum_levelid = match levelid {
+                enum_levelid = match game_mode {
+                    0 => match levelid {
                         9 | 117 | 119 => Acts::GreenHill1,
                         10 | 120 => Acts::GreenHill2,
                         11 => Acts::ChemicalPlant1,
@@ -610,10 +627,9 @@ impl State {
                         34 => Acts::TitanicMonarch1,
                         35 | 36 => Acts::TitanicMonarch2,
                         37 => Acts::EggReverie,
-                        _ => enum_levelid,
-                    };
-                } else if game_mode.current == GameMode::Encore {
-                    enum_levelid = match levelid {
+                        _ => Acts::GreenHill1,
+                    },
+                    _ =>  match levelid {
                         118 => Acts::EncoreAngelIsland,
                         119 | 38 => Acts::EncoreGreenHill1,
                         39 | 120 => Acts::EncoreGreenHill2,
@@ -639,41 +655,39 @@ impl State {
                         61 => Acts::EncoreMetallicMadness2,
                         62 => Acts::EncoreTitanicMonarch1,
                         63 | 64 => Acts::EncoreTitanicMonarch2,
-                        _ => enum_levelid,
-                    };
-                }
+                        _ => Acts::GreenHill1,
+                    }
+                };
+            } else {
+                enum_levelid = match &self.watchers.level_id.pair {
+                    Some(lvl) => lvl.current,
+                    _ => Acts::GreenHill1,
+                };
             }
-            self.watchers.level_id.update(Some(enum_levelid));
         }
+        self.watchers.level_id.update(Some(enum_levelid));
 
+        self.watchers.game_mode.update(Some(if game_mode == 0 { GameMode::Standard } else if game_mode == 1 { GameMode::Encore } else { GameMode::Invalid }));
+        self.watchers.level_id_numeric.update(Some(levelid));
         self.watchers.status.update(Some(status[0]));
-
-        let egg_reverie_monarch_health = if game.is_64_bit { proc.read_pointer_path64::<u8>(addresses.egg_reverie_base.0, &[0, addresses.egg_reverie1_offset1 as u64, addresses.egg_reverie1_offset2 as u64]).ok().unwrap_or_default() } else { proc.read_pointer_path32::<u8>(addresses.egg_reverie_base.0 as u32, &[0, addresses.egg_reverie1_offset1, addresses.egg_reverie1_offset2]).ok().unwrap_or_default() };
-        let egg_reverie_eggman_health = if game.is_64_bit { proc.read_pointer_path64::<u8>(addresses.egg_reverie_base.0, &[0, addresses.egg_reverie2_offset1 as u64, addresses.egg_reverie2_offset2 as u64]).ok().unwrap_or_default() } else { proc.read_pointer_path32::<u8>(addresses.egg_reverie_base.0 as u32, &[0, addresses.egg_reverie2_offset1, addresses.egg_reverie2_offset2]).ok().unwrap_or_default() };
         self.watchers.egg_reverie_health.update(Some(egg_reverie_eggman_health + egg_reverie_monarch_health));
-
-        let tm2_defeat = if game.is_64_bit { proc.read_pointer_path64::<u8>(addresses.egg_monarch_base.0, &[0, addresses.egg_monarch_offset as u64]).ok().unwrap_or_default() } else { proc.read_pointer_path32::<u8>(addresses.egg_monarch_base.0 as u32, &[0, addresses.egg_monarch_offset]).ok().unwrap_or_default() };
         self.watchers.titanic_monarch_2_defeated.update(Some(tm2_defeat != 0));
-
-        let chaos_emeralds = if game.is_64_bit { proc.read_pointer_path64::<u8>(addresses.chaos_emerald_base.0, &[0, addresses.chaos_emerald_offset1 as u64, addresses.chaos_emerald_offset2 as u64]).ok().unwrap_or_default() } else { proc.read_pointer_path32::<u8>(addresses.chaos_emerald_base.0 as u32, &[0, addresses.chaos_emerald_offset1, addresses.chaos_emerald_offset2]).ok().unwrap_or_default() };
         self.watchers.chaos_emeralds.update(Some(chaos_emeralds));
-
-        let characters = if game.is_64_bit { proc.read_pointer_path64::<[u8; 2]>(addresses.character_base.0, &[0, addresses.character_offset as u64]).ok().unwrap_or_default() } else { proc.read_pointer_path32::<[u8; 2]>(addresses.character_base.0 as u32, &[0, addresses.character_offset]).ok().unwrap_or_default() };
         self.watchers.character_1.update(Some(characters[0]));
         self.watchers.character_2.update(Some(characters[1]));
 
-        self.watchers.start_trigger.update(Some(proc.read::<u32>(addresses.start_trigger).ok().unwrap_or_default()));
+        self.watchers.start_trigger.update(Some(proc.read(addresses.start_trigger).ok().unwrap_or_default()));
         self.watchers.mania_mode_selection.update(Some(proc.read::<u8>(addresses.mania_mode_selection).ok().unwrap_or_default() != 0));
-        self.watchers.save_selection_mania.update(Some(proc.read::<u8>(addresses.save_selection_mania).ok().unwrap_or_default()));
-        self.watchers.save_0.update(Some(proc.read::<u8>(addresses.save_0).ok().unwrap_or_default()));
-        self.watchers.save_1.update(Some(proc.read::<u8>(addresses.save_1).ok().unwrap_or_default()));
-        self.watchers.save_2.update(Some(proc.read::<u8>(addresses.save_2).ok().unwrap_or_default()));
-        self.watchers.save_3.update(Some(proc.read::<u8>(addresses.save_3).ok().unwrap_or_default()));
-        self.watchers.save_4.update(Some(proc.read::<u8>(addresses.save_4).ok().unwrap_or_default()));
-        self.watchers.save_5.update(Some(proc.read::<u8>(addresses.save_5).ok().unwrap_or_default()));
-        self.watchers.save_6.update(Some(proc.read::<u8>(addresses.save_6).ok().unwrap_or_default()));
-        self.watchers.save_7.update(Some(proc.read::<u8>(addresses.save_7).ok().unwrap_or_default()));
-        self.watchers.save_selection_encore.update(Some(proc.read::<u8>(addresses.save_selection_encore).ok().unwrap_or_default()));
+        self.watchers.save_selection_mania.update(Some(proc.read(addresses.save_selection_mania).ok().unwrap_or_default()));
+        self.watchers.save_0.update(Some(proc.read(addresses.save_0).ok().unwrap_or_default()));
+        self.watchers.save_1.update(Some(proc.read(addresses.save_1).ok().unwrap_or_default()));
+        self.watchers.save_2.update(Some(proc.read(addresses.save_2).ok().unwrap_or_default()));
+        self.watchers.save_3.update(Some(proc.read(addresses.save_3).ok().unwrap_or_default()));
+        self.watchers.save_4.update(Some(proc.read(addresses.save_4).ok().unwrap_or_default()));
+        self.watchers.save_5.update(Some(proc.read(addresses.save_5).ok().unwrap_or_default()));
+        self.watchers.save_6.update(Some(proc.read(addresses.save_6).ok().unwrap_or_default()));
+        self.watchers.save_7.update(Some(proc.read(addresses.save_7).ok().unwrap_or_default()));
+        self.watchers.save_selection_encore.update(Some(proc.read(addresses.save_selection_encore).ok().unwrap_or_default()));
         self.watchers.save_encore_1.update(Some(proc.read::<u8>(addresses.encore_save_1).ok().unwrap_or_default() != 0));
         self.watchers.save_encore_2.update(Some(proc.read::<u8>(addresses.encore_save_2).ok().unwrap_or_default() != 0));
         self.watchers.save_encore_3.update(Some(proc.read::<u8>(addresses.encore_save_3).ok().unwrap_or_default() != 0));
@@ -764,15 +778,15 @@ impl State {
                     let Some(character_2) = &self.watchers.character_2.pair else { return false };
 
                     if chaos_emeralds.current == 0x7F && (character_1.current == 1 || (character_1.current == 4 && character_2.current == 4)) {
-                        return level_id.current == Acts::EggReverie;
+                        return level_id.current == Acts::EggReverie
                     } else {
                         let Some(tm2_defeated) = &self.watchers.titanic_monarch_2_defeated.pair else { return false };
-                        return tm2_defeated.current && !tm2_defeated.old;
+                        return tm2_defeated.current && !tm2_defeated.old
                     }
                 }
             } else {
                 let Some(tm2_defeated) = &self.watchers.titanic_monarch_2_defeated.pair else { return false };
-                return settings.encore_titanic_monarch_2 && tm2_defeated.current && !tm2_defeated.old;
+                return settings.encore_titanic_monarch_2 && tm2_defeated.current && !tm2_defeated.old
             }
         }
 
@@ -836,7 +850,7 @@ impl State {
                 _ => false
             }
         }
-
+        
         false
     }
 
