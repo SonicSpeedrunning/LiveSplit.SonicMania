@@ -122,7 +122,7 @@ struct Settings {
     /// START: Enable auto start in Encore mode
     start_encore_mode: bool,
     #[default = true]
-    /// RESET: Automatically reset when returning to the save selection screem
+    /// RESET: Automatically reset when returning to the save selection screen
     reset_save_select: bool,
     #[default = false]
     /// RESET: Automatically reset when opening the dev menu
