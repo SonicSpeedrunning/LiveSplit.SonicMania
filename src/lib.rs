@@ -394,7 +394,7 @@ impl ProcessInfo {
             egg_monarch_base = Address(game.read::<u32>(ptr).ok()? as u64);
             const SIG_EM2: Signature<24> = Signature::new("6A 00 C7 80 ???????? 01 00 00 00 A1 ???????? C7 ?? ?? 00 00 00 00");
             ptr = Address(SIG_EM2.scan_process_range(game, base, size)?.0 + 4);
-            egg_monarch_offset = game.read::<u8>(ptr).ok()? as u32;
+            egg_monarch_offset = game.read::<u32>(ptr).ok()?;
 
             // Bitmask for the Chaos Emeralds. One bit for every emerald. 0x7F = 7 emeralds.
             const SIG_CE: Signature<14> = Signature::new("7D ?? A1 ???????? 8B ?? ?? 83 ?? ?? 7F");
@@ -463,7 +463,7 @@ impl ProcessInfo {
             const SIG_EM: Signature<20> = Signature::new("89 73 ?? 48 8B ?? ???????? C7 ?? ???????? 01 00 00 00");
             ptr = Address(SIG_EM.scan_process_range(game, base, size)?.0 + 6);
             egg_monarch_base = Address(ptr.0 + 0x4 + game.read::<u32>(ptr).ok()? as u64);
-            egg_monarch_offset = game.read::<u8>(Address(ptr.0 + 6)).ok()? as u32;
+            egg_monarch_offset = game.read::<u32>(Address(ptr.0 + 6)).ok()? as u32;
 
             // Bitmask for the Chaos Emeralds. One bit for every emerald. 0x7F = 7 emeralds.
             const SIG_CE: Signature<18> = Signature::new("7D ?? 48 8B ?? ???????? 48 ?? ?? ?? 83 ?? ?? 7F 7C");
