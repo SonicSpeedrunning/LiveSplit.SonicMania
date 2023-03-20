@@ -568,7 +568,7 @@ impl State {
         let game_mode: u8;
         let levelid: u8;
         let status: [u8; 5];
-        let enum_levelid: Acts;
+        let mut enum_levelid: Acts;
         let egg_reverie_monarch_health: u8;
         let egg_reverie_eggman_health: u8;
         let tm2_defeat: u8;
@@ -594,6 +594,13 @@ impl State {
             chaos_emeralds = proc.read_pointer_path32(addresses.chaos_emerald_base.0 as u32, &[0, addresses.chaos_emerald_offset1, addresses.chaos_emerald_offset2]).ok().unwrap_or_default();
             characters = proc.read_pointer_path32(addresses.character_base.0 as u32, &[0, addresses.character_offset]).ok().unwrap_or_default();
         }
+
+
+        // Level ID logic
+        enum_levelid = match &self.watchers.level_id.pair {
+            Some(lvl) => lvl.current,
+            _ => Acts::GreenHill1,
+        };
 
         // If level ID == 37, it's always Egg Reverie. Don't even consider the IGT because it's scrambled in that stage
         if levelid == 37 { 
@@ -627,7 +634,7 @@ impl State {
                         34 => Acts::TitanicMonarch1,
                         35 | 36 => Acts::TitanicMonarch2,
                         37 => Acts::EggReverie,
-                        _ => Acts::GreenHill1,
+                        _ => enum_levelid,
                     },
                     _ =>  match levelid {
                         118 => Acts::EncoreAngelIsland,
@@ -655,13 +662,8 @@ impl State {
                         61 => Acts::EncoreMetallicMadness2,
                         62 => Acts::EncoreTitanicMonarch1,
                         63 | 64 => Acts::EncoreTitanicMonarch2,
-                        _ => Acts::GreenHill1,
+                        _ => enum_levelid,
                     }
-                };
-            } else {
-                enum_levelid = match &self.watchers.level_id.pair {
-                    Some(lvl) => lvl.current,
-                    _ => Acts::GreenHill1,
                 };
             }
         }
